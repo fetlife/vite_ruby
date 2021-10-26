@@ -28,11 +28,20 @@ module ViteRails::TagHelpers
                           asset_type: :javascript,
                           skip_preload_tags: false,
                           skip_style_tags: false,
+                          forward_to_dev_server: false,
                           crossorigin: 'anonymous',
                           media: 'screen',
                           **options)
     entries = vite_manifest.resolve_entries(*names, type: asset_type)
-    tags = javascript_include_tag(*entries.fetch(:scripts), crossorigin: crossorigin, type: type, extname: false, **options)
+
+    scripts =
+      if forward_to_dev_server && ViteRuby.instance.dev_server_running?
+        host_with_port = ViteRuby.instance.config.host_with_port
+        entries.fetch(:scripts).map{ |script| "http://#{host_with_port}#{script}" }
+      else
+        entries.fetch(:scripts)
+      end
+    tags = javascript_include_tag(*scripts, crossorigin: crossorigin, type: type, extname: false, **options)
     tags << vite_preload_tag(*entries.fetch(:imports), crossorigin: crossorigin, **options) unless skip_preload_tags
     tags << stylesheet_link_tag(*entries.fetch(:stylesheets), media: media, crossorigin: crossorigin, **options) unless skip_style_tags
     tags
