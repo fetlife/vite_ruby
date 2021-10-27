@@ -11,11 +11,16 @@ module VitePluginLegacy::TagHelpers
     return if ViteRuby.instance.dev_server_running?
 
     legacy_name = name.sub(/(\..+)|$/, '-legacy\1')
+
     import_tag = content_tag(:script, nomodule: true) {
       vite_legacy_import_body(name, asset_type: asset_type)
     }
 
-    import_tag
+    legacy_fallback_tag = content_tag(:script, nil, type: 'module') do
+      vite_dynamic_fallback_inline_code(name, asset_type: asset_type)
+    end
+
+    safe_join([import_tag, legacy_fallback_tag], "\n")
   end
 
   # Public: Same as `vite_legacy_javascript_tag`, but for TypeScript entries.
@@ -25,20 +30,15 @@ module VitePluginLegacy::TagHelpers
 
   # Renders the vite-legacy-polyfill to enable code splitting in
   # browsers that do not support modules.
-  # Entrypoints in format: {"entrypoint_name" => asset_type }
-  # e.g.: { "application" => :typescript }
-  def vite_legacy_polyfill_tag(entrypoints)
+  def vite_legacy_polyfill_tag
     return if ViteRuby.instance.dev_server_running?
 
     name = vite_manifest.send(:manifest).keys.find { |file| file.include?('legacy-polyfills') } ||
            raise(ArgumentError, 'Vite legacy polyfill not found in manifest.json')
-    tags = []
-    tags.push(content_tag(:script, nil, nomodule: true) { VITE_SAFARI_NOMODULE_FIX })
-    tags.push(content_tag(:script, nil, nomodule: true, id: 'vite-legacy-polyfill', src: vite_asset_path(name)))
-    entrypoints.each do |entrypoint, asset_type|
-      tags.push(content_tag(:script, nil, type: 'module') { vite_dynamic_fallback_inline_code(entrypoint, asset_type: asset_type) })
-    end
-    safe_join(tags, "\n")
+
+    safari_nomodule_fix = content_tag(:script, nil, nomodule: true) { VITE_SAFARI_NOMODULE_FIX }
+    legacy_nomodule_fallback = content_tag(:script, nil, nomodule: true, id: 'vite-legacy-polyfill', src: vite_asset_path(name))
+    safe_join([safari_nomodule_fix, legacy_nomodule_fallback], "\n")
   end
 
   def vite_dynamic_fallback_inline_code(name, asset_type: :javascript)
