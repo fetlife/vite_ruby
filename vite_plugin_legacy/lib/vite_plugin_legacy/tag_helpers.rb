@@ -27,6 +27,6 @@ module VitePluginLegacy::TagHelpers
 
     name = vite_manifest.send(:manifest).keys.find { |file| file.include?('legacy-polyfills') } ||
            raise(ArgumentError, 'Vite legacy polyfill not found in manifest.json')
-    content_tag(:script, nil, nomodule: true, src: vite_asset_path(name))
+    content_tag(:script, nil, nomodule: true, id: 'vite-legacy-polyfill', src: vite_asset_path(name))
   end
 end
