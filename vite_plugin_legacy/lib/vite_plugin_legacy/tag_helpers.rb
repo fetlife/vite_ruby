@@ -16,11 +16,7 @@ module VitePluginLegacy::TagHelpers
       vite_legacy_import_body(name, asset_type: asset_type)
     }
 
-    legacy_fallback_tag = content_tag(:script, nil, type: 'module') do
-      vite_dynamic_fallback_inline_code(name, asset_type: asset_type)
-    end
-
-    safe_join([import_tag, legacy_fallback_tag], "\n")
+    import_tag
   end
 
   # Public: Same as `vite_legacy_javascript_tag`, but for TypeScript entries.
@@ -30,19 +26,35 @@ module VitePluginLegacy::TagHelpers
 
   # Renders the vite-legacy-polyfill to enable code splitting in
   # browsers that do not support modules.
-  def vite_legacy_polyfill_tag
+  # entrypoints: { "entrypoint_name" => asset_type }
+  # e.g.: { "application" => :typescript }
+  # must come before all other vite import tags
+  def vite_legacy_polyfill_tag(entrypoints)
     return if ViteRuby.instance.dev_server_running?
 
     name = vite_manifest.send(:manifest).keys.find { |file| file.include?('legacy-polyfills') } ||
            raise(ArgumentError, 'Vite legacy polyfill not found in manifest.json')
 
+    tags = []
     safari_nomodule_fix = content_tag(:script, nil, nomodule: true) { VITE_SAFARI_NOMODULE_FIX }
-    legacy_nomodule_fallback = content_tag(:script, nil, nomodule: true, id: 'vite-legacy-polyfill', src: vite_asset_path(name))
-    safe_join([safari_nomodule_fix, legacy_nomodule_fallback], "\n")
+    tags.push(safari_nomodule_fix)
+    # for browsers which do not support modules at all
+    legacy_polyfill = content_tag(:script, nil, nomodule: true, id: 'vite-legacy-polyfill', src: vite_asset_path(name))
+    tags.push(legacy_polyfill)
+    # for browsers which support modules, but don't support dynamic import
+    legacy_fallback_tag = content_tag(:script, nil, type: 'module') do
+      vite_dynamic_fallback_inline_code(entrypoints)
+    end
+    tags.push(legacy_fallback_tag)
+    safe_join(tags, "\n")
   end
 
-  def vite_dynamic_fallback_inline_code(name, asset_type: :javascript)
-    %Q{!function(){try{new Function("m","return import(m)")}catch(o){console.warn("vite: loading legacy build because dynamic import is unsupported, syntax error above should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){#{vite_legacy_import_body(name, asset_type: asset_type)}},document.body.appendChild(n)}}();}.html_safe
+  def vite_dynamic_fallback_inline_code(entrypoints)
+    load_body = entrypoints.map do |name, asset_type|
+      vite_legacy_import_body(name, asset_type: asset_type)
+    end
+    load_body = safe_join(load_body, "\n")
+    %Q{!function(){try{new Function("m","return import(m)")}catch(o){console.warn("vite: loading legacy build because dynamic import is unsupported, syntax error above should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){#{load_body}},document.body.appendChild(n)}}();}.html_safe
   end
 
   def vite_legacy_import_body(name, asset_type: :javascript)
